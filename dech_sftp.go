@@ -78,32 +78,32 @@ func ReadDir(client *sftp.Client, remoteDir string) ([]FileInfo, error) {
 	return result, nil
 }
 
-func CreateDir(client *sftp.Client, remoteDir string) (*sftp.File, error) {
-	files, err := client.Create(remoteDir)
+func CreateDir(client *sftp.Client, remoteDir string) error {
+	err := client.Mkdir(remoteDir)
 	if err != nil {
 		fmt.Printf("unable to create remote dir: %v\n", err)
-		return nil, err
+		return err
 	}
 
-	return files, nil
+	return nil
 }
 
 // Download file from sftp server
-func DownloadFile(client *sftp.Client, remoteFile, localFile string) (err error) {
+func DownloadFile(client *sftp.Client, remoteFile, localFile string) (int64, error) {
 
 	fmt.Fprintf(os.Stdout, "Downloading [%s] to [%s] ...\n", remoteFile, localFile)
 	// Note: SFTP To Go doesn't support O_RDWR mode
 	srcFile, err := client.OpenFile(remoteFile, (os.O_RDONLY))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Unable to open remote file: %v\n", err)
-		return
+		return -1, err
 	}
 	defer srcFile.Close()
 
 	dstFile, err := os.Create(localFile)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Unable to open local file: %v\n", err)
-		return
+		return -1, err
 	}
 	defer dstFile.Close()
 
@@ -114,17 +114,17 @@ func DownloadFile(client *sftp.Client, remoteFile, localFile string) (err error)
 	}
 	fmt.Fprintf(os.Stdout, "%d bytes copied\n", bytes)
 
-	return
+	return bytes, err
 }
 
 // Upload file to sftp server
-func UploadFile(client *sftp.Client, localFile, remoteFile string) (err error) {
+func UploadFile(client *sftp.Client, localFile, remoteFile string) (int64, error) {
 	fmt.Fprintf(os.Stdout, "Uploading [%s] to [%s] ...\n", localFile, remoteFile)
 
 	srcFile, err := os.Open(localFile)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Unable to open local file: %v\n", err)
-		return
+		return -1, err
 	}
 	defer srcFile.Close()
 
@@ -132,7 +132,7 @@ func UploadFile(client *sftp.Client, localFile, remoteFile string) (err error) {
 	dstFile, err := client.OpenFile(remoteFile, (os.O_WRONLY | os.O_CREATE | os.O_TRUNC))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Unable to open remote file: %v\n", err)
-		return
+		return -1, err
 	}
 	defer dstFile.Close()
 
@@ -143,5 +143,5 @@ func UploadFile(client *sftp.Client, localFile, remoteFile string) (err error) {
 	}
 	fmt.Fprintf(os.Stdout, "%d bytes copied\n", bytes)
 
-	return
+	return bytes, err
 }
