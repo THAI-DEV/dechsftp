@@ -1,6 +1,6 @@
 module github.com/THAI-DEV/dechsftp
 
-go 1.18
+go 1.20
 
 require (
 	github.com/pkg/sftp v1.13.4

@@ -78,6 +78,16 @@ func ReadDir(client *sftp.Client, remoteDir string) ([]FileInfo, error) {
 	return result, nil
 }
 
+func CreateDir(client *sftp.Client, remoteDir string) (*sftp.File, error) {
+	files, err := client.Create(remoteDir)
+	if err != nil {
+		fmt.Printf("unable to create remote dir: %v\n", err)
+		return nil, err
+	}
+
+	return files, nil
+}
+
 // Download file from sftp server
 func DownloadFile(client *sftp.Client, remoteFile, localFile string) (err error) {
 
