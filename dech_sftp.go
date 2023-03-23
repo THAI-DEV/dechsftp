@@ -80,6 +80,36 @@ func ReadDirAndFileInfoOneLevel(client *sftp.Client, remoteDir string) ([]FileIn
 	return result, nil
 }
 
+// TODO
+func ReadDirAndFileInfoAllLevel(client *sftp.Client, remoteDir string, isIncludeRemoteDir bool) ([]FileInfo, error) {
+	dirList, err := GetDirNameAllLevel(client, remoteDir)
+	if err != nil {
+		return nil, err
+	}
+
+	result := []FileInfo{}
+	for _, dirName := range dirList {
+		fileInfoList, err := ReadDirAndFileInfoOneLevel(client, dirName)
+		if err != nil {
+			return nil, err
+		}
+
+		result = append(result, fileInfoList...)
+	}
+
+	if isIncludeRemoteDir {
+		fileInfoList2, err := ReadDirAndFileInfoOneLevel(client, remoteDir)
+		if err != nil {
+			return nil, err
+		}
+
+		result = append(result, fileInfoList2...)
+	}
+
+	return result, nil
+}
+
+// * Exclude Remote Dir
 func GetDirNameAllLevel(client *sftp.Client, remoteDir string) ([]string, error) {
 	resultDir := []string{}
 	fileInfoList, err := ReadDirAndFileInfoOneLevel(client, remoteDir)
@@ -91,9 +121,9 @@ func GetDirNameAllLevel(client *sftp.Client, remoteDir string) ([]string, error)
 		f := remoteDir + "/" + v.Name
 		if v.IsDir {
 			resultDir = append(resultDir, f)
-			sunDir, _ := GetDirNameAllLevel(client, f)
-			if len(sunDir) > 0 {
-				resultDir = append(resultDir, sunDir...)
+			subDir, _ := GetDirNameAllLevel(client, f)
+			if len(subDir) > 0 {
+				resultDir = append(resultDir, subDir...)
 			}
 		}
 	}
@@ -101,47 +131,7 @@ func GetDirNameAllLevel(client *sftp.Client, remoteDir string) ([]string, error)
 	return resultDir, nil
 }
 
-func computeAndOrderDirNameByLevel(dirNameList []string) ([]string, error) {
-	type fileAttrType struct {
-		name  string
-		level int
-	}
-
-	fileAttr := []fileAttrType{}
-	maxLevel := -1
-
-	for _, fileName := range dirNameList {
-		a := strings.Split(fileName, "/")
-		levelFileName := len(a)
-
-		data := fileAttrType{
-			name:  fileName,
-			level: levelFileName,
-		}
-
-		fileAttr = append(fileAttr, data)
-
-		if levelFileName > maxLevel {
-			maxLevel = levelFileName
-		}
-	}
-
-	result := []string{}
-	for i := maxLevel; i >= 1; i-- {
-		for _, v := range fileAttr {
-			if i == v.level {
-				result = append(result, v.name)
-			}
-		}
-	}
-
-	// for _, v := range result {
-	// 	fmt.Println(v)
-	// }
-
-	return result, nil
-}
-
+// * Include File in Remote Dir
 func GetFileNameAllLevel(client *sftp.Client, remoteDir string) ([]string, error) {
 	dirList, err := GetDirNameAllLevel(client, remoteDir)
 	if err != nil {
@@ -181,27 +171,6 @@ func GetFileNameOneLevel(client *sftp.Client, remoteDir string) ([]string, error
 	return result, nil
 }
 
-func GetSepalateNameAllInDir(client *sftp.Client, remoteDir string) ([]string, []string, error) {
-	resultFileName := []string{}
-	resultDirName := []string{}
-	fileInfoList, err := ReadDirAndFileInfoOneLevel(client, remoteDir)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	for _, v := range fileInfoList {
-		f := remoteDir + "/" + v.Name
-		if v.IsDir {
-			resultDirName = append(resultDirName, f)
-		} else {
-			resultFileName = append(resultFileName, f)
-		}
-
-	}
-
-	return resultDirName, resultFileName, nil
-}
-
 func CreateDir(client *sftp.Client, remoteDir string) error {
 	err := client.Mkdir(remoteDir)
 	if err != nil {
@@ -211,7 +180,7 @@ func CreateDir(client *sftp.Client, remoteDir string) error {
 	return nil
 }
 
-func DeleteAllInDir(client *sftp.Client, remoteDir string, isShowMsg bool) error {
+func DeleteAllInDir(client *sftp.Client, remoteDir string, isIncludeRemoteDir bool, isShowMsg bool) error {
 	//* 1. Delete All File
 	fileNameList, err := GetFileNameAllLevel(client, remoteDir)
 	if err != nil {
@@ -235,10 +204,7 @@ func DeleteAllInDir(client *sftp.Client, remoteDir string, isShowMsg bool) error
 		return err
 	}
 
-	dirNameList, err = computeAndOrderDirNameByLevel(dirNameList)
-	if err != nil {
-		return err
-	}
+	dirNameList = ComputeAndOrderDirNameListByLevel(dirNameList, true)
 
 	for _, dirName := range dirNameList {
 		err = client.Remove(dirName)
@@ -252,13 +218,15 @@ func DeleteAllInDir(client *sftp.Client, remoteDir string, isShowMsg bool) error
 	}
 
 	//* 3. Delete Remote Dir
-	err = client.Remove(remoteDir)
-	if err != nil {
-		return err
-	}
+	if isIncludeRemoteDir {
+		err = client.Remove(remoteDir)
+		if err != nil {
+			return err
+		}
 
-	if isShowMsg {
-		fmt.Println("Remote Dir : " + remoteDir)
+		if isShowMsg {
+			fmt.Println("Remote Dir : " + remoteDir)
+		}
 	}
 
 	return nil
@@ -282,15 +250,17 @@ func RenameDirOrFile(client *sftp.Client, oldRemoteDirOrFile string, newRemoteDi
 	return nil
 }
 
-func ChangeModeAllInDir(client *sftp.Client, remoteDir string, fileMode fs.FileMode, isShowMsg bool) error {
+func ChangeModeAllInDir(client *sftp.Client, remoteDir string, fileMode fs.FileMode, isIncludeRemoteDir bool, isShowMsg bool) error {
 	//* 1. Change Remote Dir
-	err := client.Chmod(remoteDir, fileMode)
-	if err != nil {
-		return err
-	}
+	if isIncludeRemoteDir {
+		err := client.Chmod(remoteDir, fileMode)
+		if err != nil {
+			return err
+		}
 
-	if isShowMsg {
-		fmt.Println("Remote Dir : " + remoteDir)
+		if isShowMsg {
+			fmt.Println("Remote Dir : " + remoteDir)
+		}
 	}
 
 	//* 2.  Change Sub Dir
@@ -422,3 +392,72 @@ func UploadFile(client *sftp.Client, localFile, remoteFile string, isShowMsg boo
 
 	return bytes, err
 }
+
+// reverse : max -> min
+func ComputeAndOrderDirNameListByLevel(dirNameList []string, isReverse bool) []string {
+	type fileAttrType struct {
+		name  string
+		level int
+	}
+
+	fileAttr := []fileAttrType{}
+	maxLevel := -1
+
+	for _, fileName := range dirNameList {
+		a := strings.Split(fileName, "/")
+		levelFileName := len(a)
+
+		data := fileAttrType{
+			name:  fileName,
+			level: levelFileName,
+		}
+
+		fileAttr = append(fileAttr, data)
+
+		if levelFileName > maxLevel {
+			maxLevel = levelFileName
+		}
+	}
+
+	result := []string{}
+	if isReverse { // max -> min
+		for i := maxLevel; i >= 1; i-- {
+			for _, v := range fileAttr {
+				if i == v.level {
+					result = append(result, v.name)
+				}
+			}
+		}
+	} else { // min -> max
+		for i := 1; i <= maxLevel; i++ {
+			for _, v := range fileAttr {
+				if i == v.level {
+					result = append(result, v.name)
+				}
+			}
+		}
+	}
+
+	return result
+}
+
+// func GetSepalateNameAllInDir(client *sftp.Client, remoteDir string) ([]string, []string, error) {
+// 	resultFileName := []string{}
+// 	resultDirName := []string{}
+// 	fileInfoList, err := ReadDirAndFileInfoOneLevel(client, remoteDir)
+// 	if err != nil {
+// 		return nil, nil, err
+// 	}
+
+// 	for _, v := range fileInfoList {
+// 		f := remoteDir + "/" + v.Name
+// 		if v.IsDir {
+// 			resultDirName = append(resultDirName, f)
+// 		} else {
+// 			resultFileName = append(resultFileName, f)
+// 		}
+
+// 	}
+
+// 	return resultDirName, resultFileName, nil
+// }
