@@ -79,7 +79,7 @@ func ReadDir(client *sftp.Client, remoteDir string) ([]FileInfo, error) {
 	return result, nil
 }
 
-func GetAllFileInDir(client *sftp.Client, remoteDir string) ([]string, error) {
+func GetNameAllInDir(client *sftp.Client, remoteDir string) ([]string, error) {
 	result := []string{}
 	fileInfoList, err := ReadDir(client, remoteDir)
 	if err != nil {
@@ -94,6 +94,27 @@ func GetAllFileInDir(client *sftp.Client, remoteDir string) ([]string, error) {
 	return result, nil
 }
 
+func GetSepalateNameAllInDir(client *sftp.Client, remoteDir string) ([]string, []string, error) {
+	resultFileName := []string{}
+	resultDirName := []string{}
+	fileInfoList, err := ReadDir(client, remoteDir)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	for _, v := range fileInfoList {
+		f := remoteDir + "/" + v.Name
+		if v.IsDir {
+			resultDirName = append(resultDirName, f)
+		} else {
+			resultFileName = append(resultFileName, f)
+		}
+
+	}
+
+	return resultDirName, resultFileName, nil
+}
+
 func CreateDir(client *sftp.Client, remoteDir string) error {
 	err := client.Mkdir(remoteDir)
 	if err != nil {
@@ -104,7 +125,7 @@ func CreateDir(client *sftp.Client, remoteDir string) error {
 }
 
 func DeleteAllInDir(client *sftp.Client, remoteDir string, isShowMsg bool) error {
-	fileNameList, err := GetAllFileInDir(client, remoteDir)
+	fileNameList, err := GetNameAllInDir(client, remoteDir)
 	if err != nil {
 		return err
 	}
@@ -151,7 +172,7 @@ func RenameDirOrFile(client *sftp.Client, oldRemoteDirOrFile string, newRemoteDi
 }
 
 func ChangeModeAllInDir(client *sftp.Client, remoteDir string, fileMode fs.FileMode, isShowMsg bool) error {
-	fileNameList, err := GetAllFileInDir(client, remoteDir)
+	fileNameList, err := GetNameAllInDir(client, remoteDir)
 	if err != nil {
 		return err
 	}
