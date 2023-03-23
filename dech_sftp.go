@@ -3,6 +3,7 @@ package dechsftp
 import (
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"os"
 
@@ -57,7 +58,7 @@ func ReadDir(client *sftp.Client, remoteDir string) ([]FileInfo, error) {
 
 	files, err := client.ReadDir(remoteDir)
 	if err != nil {
-		fmt.Printf("unable to list remote dir: %v\n", err)
+		// fmt.Printf("unable to list remote dir: %v\n", err)
 		return result, err
 	}
 
@@ -78,10 +79,109 @@ func ReadDir(client *sftp.Client, remoteDir string) ([]FileInfo, error) {
 	return result, nil
 }
 
+func GetAllFileInDir(client *sftp.Client, remoteDir string) ([]string, error) {
+	result := []string{}
+	fileInfoList, err := ReadDir(client, remoteDir)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, v := range fileInfoList {
+		f := remoteDir + "/" + v.Name
+		result = append(result, f)
+	}
+
+	return result, nil
+}
+
 func CreateDir(client *sftp.Client, remoteDir string) error {
 	err := client.Mkdir(remoteDir)
 	if err != nil {
-		fmt.Printf("unable to create remote dir: %v\n", err)
+		return err
+	}
+
+	return nil
+}
+
+func DeleteAllInDir(client *sftp.Client, remoteDir string, isShowMsg bool) error {
+	fileNameList, err := GetAllFileInDir(client, remoteDir)
+	if err != nil {
+		return err
+	}
+
+	for _, remoteFile := range fileNameList {
+		err = client.Remove(remoteFile)
+		if err != nil {
+			return err
+		}
+
+		if isShowMsg {
+			fmt.Println("File : " + remoteFile)
+		}
+	}
+
+	err = client.Remove(remoteDir)
+	if err != nil {
+		return err
+	}
+
+	if isShowMsg {
+		fmt.Println("Dir : " + remoteDir)
+	}
+
+	return nil
+}
+
+func DeleteEmptyDirOrFile(client *sftp.Client, remoteDirOrFile string) error {
+	err := client.Remove(remoteDirOrFile)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func RenameDirOrFile(client *sftp.Client, oldRemoteDirOrFile string, newRemoteDirOrFile string) error {
+	err := client.Rename(oldRemoteDirOrFile, newRemoteDirOrFile)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func ChangeModeAllInDir(client *sftp.Client, remoteDir string, fileMode fs.FileMode, isShowMsg bool) error {
+	fileNameList, err := GetAllFileInDir(client, remoteDir)
+	if err != nil {
+		return err
+	}
+
+	err = client.Chmod(remoteDir, fileMode)
+	if err != nil {
+		return err
+	}
+
+	if isShowMsg {
+		fmt.Println("Dir : " + remoteDir)
+	}
+
+	for _, remoteFile := range fileNameList {
+		err = client.Chmod(remoteFile, fileMode)
+		if err != nil {
+			return err
+		}
+
+		if isShowMsg {
+			fmt.Println("File : " + remoteFile)
+		}
+	}
+
+	return nil
+}
+
+func ChangeModeDirOrFile(client *sftp.Client, remoteDirOrFile string, fileMode fs.FileMode) error {
+	err := client.Chmod(remoteDirOrFile, fileMode)
+	if err != nil {
 		return err
 	}
 
@@ -90,7 +190,6 @@ func CreateDir(client *sftp.Client, remoteDir string) error {
 
 // Download file from sftp server
 func DownloadFile(client *sftp.Client, remoteFile, localFile string) (int64, error) {
-
 	fmt.Fprintf(os.Stdout, "Downloading [%s] to [%s] ...\n", remoteFile, localFile)
 	// Note: SFTP To Go doesn't support O_RDWR mode
 	srcFile, err := client.OpenFile(remoteFile, (os.O_RDONLY))
