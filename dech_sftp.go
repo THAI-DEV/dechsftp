@@ -17,6 +17,7 @@ type FileInfo struct {
 	ModTime string
 	Size    string //byte
 	IsDir   bool
+	Level   int
 }
 
 func NewConnection(host string, port string, username, password string) (*ssh.Client, error) {
@@ -180,7 +181,7 @@ func CreateDir(client *sftp.Client, remoteDir string) error {
 	return nil
 }
 
-func DeleteAllInDir(client *sftp.Client, remoteDir string, isIncludeRemoteDir bool, isShowMsg bool) error {
+func DeleteAllInDir(client *sftp.Client, remoteDir string, isIncludeRemoteDir bool, isShowDebugMsg bool) error {
 	//* 1. Delete All File
 	fileNameList, err := GetFileNameAllLevel(client, remoteDir)
 	if err != nil {
@@ -193,7 +194,7 @@ func DeleteAllInDir(client *sftp.Client, remoteDir string, isIncludeRemoteDir bo
 			return err
 		}
 
-		if isShowMsg {
+		if isShowDebugMsg {
 			fmt.Println("File : " + fileName)
 		}
 	}
@@ -212,7 +213,7 @@ func DeleteAllInDir(client *sftp.Client, remoteDir string, isIncludeRemoteDir bo
 			return err
 		}
 
-		if isShowMsg {
+		if isShowDebugMsg {
 			fmt.Println("Sub Dir : " + remoteDir)
 		}
 	}
@@ -224,7 +225,7 @@ func DeleteAllInDir(client *sftp.Client, remoteDir string, isIncludeRemoteDir bo
 			return err
 		}
 
-		if isShowMsg {
+		if isShowDebugMsg {
 			fmt.Println("Remote Dir : " + remoteDir)
 		}
 	}
@@ -250,7 +251,7 @@ func RenameDirOrFile(client *sftp.Client, oldRemoteDirOrFile string, newRemoteDi
 	return nil
 }
 
-func ChangeModeAllInDir(client *sftp.Client, remoteDir string, fileMode fs.FileMode, isIncludeRemoteDir bool, isShowMsg bool) error {
+func ChangeModeAllInDir(client *sftp.Client, remoteDir string, fileMode fs.FileMode, isIncludeRemoteDir bool, isShowDebugMsg bool) error {
 	//* 1. Change Remote Dir
 	if isIncludeRemoteDir {
 		err := client.Chmod(remoteDir, fileMode)
@@ -258,7 +259,7 @@ func ChangeModeAllInDir(client *sftp.Client, remoteDir string, fileMode fs.FileM
 			return err
 		}
 
-		if isShowMsg {
+		if isShowDebugMsg {
 			fmt.Println("Remote Dir : " + remoteDir)
 		}
 	}
@@ -275,7 +276,7 @@ func ChangeModeAllInDir(client *sftp.Client, remoteDir string, fileMode fs.FileM
 			return err
 		}
 
-		if isShowMsg {
+		if isShowDebugMsg {
 			fmt.Println("Sub Dir : " + dirName)
 		}
 	}
@@ -292,7 +293,7 @@ func ChangeModeAllInDir(client *sftp.Client, remoteDir string, fileMode fs.FileM
 			return err
 		}
 
-		if isShowMsg {
+		if isShowDebugMsg {
 			fmt.Println("File : " + fileName)
 		}
 	}
@@ -309,15 +310,15 @@ func ChangeModeDirOrFile(client *sftp.Client, remoteDirOrFile string, fileMode f
 	return nil
 }
 
-func DownloadFile(client *sftp.Client, remoteFile, localFile string, isShowMsg bool) (int64, error) {
-	if isShowMsg {
+func DownloadFile(client *sftp.Client, remoteFile, localFile string, isShowDebugMsg bool) (int64, error) {
+	if isShowDebugMsg {
 		fmt.Fprintf(os.Stdout, "Downloading [%s] to [%s] ...\n", remoteFile, localFile)
 	}
 
 	// Note: SFTP To Go doesn't support O_RDWR mode
 	srcFile, err := client.OpenFile(remoteFile, (os.O_RDONLY))
 	if err != nil {
-		if isShowMsg {
+		if isShowDebugMsg {
 			fmt.Fprintf(os.Stderr, "Unable to open remote file: %v\n", err)
 		}
 
@@ -327,7 +328,7 @@ func DownloadFile(client *sftp.Client, remoteFile, localFile string, isShowMsg b
 
 	dstFile, err := os.Create(localFile)
 	if err != nil {
-		if isShowMsg {
+		if isShowDebugMsg {
 			fmt.Fprintf(os.Stderr, "Unable to open local file: %v\n", err)
 		}
 
@@ -337,28 +338,28 @@ func DownloadFile(client *sftp.Client, remoteFile, localFile string, isShowMsg b
 
 	bytes, err := io.Copy(dstFile, srcFile)
 	if err != nil {
-		if isShowMsg {
+		if isShowDebugMsg {
 			fmt.Fprintf(os.Stderr, "Unable to download remote file: %v\n", err)
 		}
 
 		os.Exit(1)
 	}
 
-	if isShowMsg {
+	if isShowDebugMsg {
 		fmt.Fprintf(os.Stdout, "%d bytes copied\n", bytes)
 	}
 
 	return bytes, err
 }
 
-func UploadFile(client *sftp.Client, localFile, remoteFile string, isShowMsg bool) (int64, error) {
-	if isShowMsg {
+func UploadFile(client *sftp.Client, localFile, remoteFile string, isShowDebugMsg bool) (int64, error) {
+	if isShowDebugMsg {
 		fmt.Fprintf(os.Stdout, "Uploading [%s] to [%s] ...\n", localFile, remoteFile)
 	}
 
 	srcFile, err := os.Open(localFile)
 	if err != nil {
-		if isShowMsg {
+		if isShowDebugMsg {
 			fmt.Fprintf(os.Stderr, "Unable to open local file: %v\n", err)
 		}
 
@@ -369,7 +370,7 @@ func UploadFile(client *sftp.Client, localFile, remoteFile string, isShowMsg boo
 	// Note: SFTP To Go doesn't support O_RDWR mode
 	dstFile, err := client.OpenFile(remoteFile, (os.O_WRONLY | os.O_CREATE | os.O_TRUNC))
 	if err != nil {
-		if isShowMsg {
+		if isShowDebugMsg {
 			fmt.Fprintf(os.Stderr, "Unable to open remote file: %v\n", err)
 		}
 
@@ -379,14 +380,14 @@ func UploadFile(client *sftp.Client, localFile, remoteFile string, isShowMsg boo
 
 	bytes, err := io.Copy(dstFile, srcFile)
 	if err != nil {
-		if isShowMsg {
+		if isShowDebugMsg {
 			fmt.Fprintf(os.Stderr, "Unable to upload local file: %v\n", err)
 		}
 
 		os.Exit(1)
 	}
 
-	if isShowMsg {
+	if isShowDebugMsg {
 		fmt.Fprintf(os.Stdout, "%d bytes copied\n", bytes)
 	}
 
@@ -441,23 +442,79 @@ func ComputeAndOrderDirNameListByLevel(dirNameList []string, isReverse bool) []s
 	return result
 }
 
-// func GetSepalateNameAllInDir(client *sftp.Client, remoteDir string) ([]string, []string, error) {
-// 	resultFileName := []string{}
-// 	resultDirName := []string{}
-// 	fileInfoList, err := ReadDirAndFileInfoOneLevel(client, remoteDir)
-// 	if err != nil {
-// 		return nil, nil, err
-// 	}
+func Walk(client *sftp.Client, remoteDir string, isIncludeDir bool, isIncludeFile bool, isIncludeRemoteDir bool, isShowDebugMsg bool) []FileInfo {
+	result := []FileInfo{}
 
-// 	for _, v := range fileInfoList {
-// 		f := remoteDir + "/" + v.Name
-// 		if v.IsDir {
-// 			resultDirName = append(resultDirName, f)
-// 		} else {
-// 			resultFileName = append(resultFileName, f)
-// 		}
+	w := client.Walk(remoteDir)
+	for w.Step() {
+		if w.Err() != nil {
+			continue
+		}
 
-// 	}
+		if isShowDebugMsg {
+			fmt.Println(w.Path())
+		}
 
-// 	return resultDirName, resultFileName, nil
-// }
+		fInfo := FileInfo{
+			Name:    w.Path(),
+			ModTime: w.Stat().ModTime().String(),
+			Size:    fmt.Sprintf("%12d", w.Stat().Size()),
+			IsDir:   w.Stat().IsDir(),
+			Level:   len(strings.Split(w.Path(), "/")) - 1,
+		}
+
+		if isIncludeDir {
+			if fInfo.IsDir {
+				if !isIncludeRemoteDir {
+					if fInfo.Name != remoteDir {
+						result = append(result, fInfo)
+					}
+				}
+
+				if isIncludeRemoteDir {
+					result = append(result, fInfo)
+				}
+			}
+		}
+
+		if isIncludeFile {
+			if !fInfo.IsDir {
+				result = append(result, fInfo)
+			}
+		}
+	}
+
+	return result
+}
+
+func FilterPath(list []FileInfo, remoteDir string, isIncludeDir bool, isIncludeFile bool, isIncludeRemoteDir bool, isShowDebugMsg bool) []FileInfo {
+	result := []FileInfo{}
+
+	for _, fInfo := range list {
+		if isShowDebugMsg {
+			fmt.Println(fInfo.Name)
+		}
+
+		if isIncludeDir {
+			if fInfo.IsDir {
+				if !isIncludeRemoteDir {
+					if fInfo.Name != remoteDir {
+						result = append(result, fInfo)
+					}
+				}
+
+				if isIncludeRemoteDir {
+					result = append(result, fInfo)
+				}
+			}
+		}
+
+		if isIncludeFile {
+			if !fInfo.IsDir {
+				result = append(result, fInfo)
+			}
+		}
+	}
+
+	return result
+}
