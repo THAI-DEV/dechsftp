@@ -31,20 +31,31 @@ func main() {
 
 	remoteDir := "/root/DECH/Test/a"
 
-	list, err := dechsftp.GetDirNameAllLevel(client, remoteDir)
-	if err != nil {
-		fmt.Println(err)
-	}
+	list := dechsftp.Walk(client, remoteDir, false)
 
-	list = dechsftp.ComputeAndOrderDirNameListByLevel(list, true)
+	dirAndFileList := dechsftp.FilterFileInfoList(list, remoteDir, true, true, true, false)
+	showList(dirAndFileList, "All List")
 
-	for _, v := range list {
-		fmt.Println(v)
-	}
+	dirListIncludeRemoteDir := dechsftp.FilterFileInfoList(list, remoteDir, true, false, true, false)
+	showList(dirListIncludeRemoteDir, "Dir List Include Remote Dir")
 
-	fmt.Println("-----------------------------")
-	ss := dechsftp.Walk(client, remoteDir, true, true, true, false)
-	for i, v := range ss {
-		fmt.Println(i+1, v.Name, v.ModTime, v.ModTime, v.Level)
+	dirListExcludeRemoteDir := dechsftp.FilterFileInfoList(list, remoteDir, true, false, false, false)
+	showList(dirListExcludeRemoteDir, "Dir List Exclude Remote Dir")
+
+	fileList := dechsftp.FilterFileInfoList(list, remoteDir, false, true, false, false)
+	showList(fileList, "File List")
+
+	orderFileList := dechsftp.OrderFileInfoList(fileList, true)
+	showList(orderFileList, "Order File List")
+
+	orderDirList := dechsftp.OrderFileInfoList(dirListIncludeRemoteDir, true)
+	showList(orderDirList, "Order Dir List")
+}
+
+func showList(list []dechsftp.FileInfo, msg string) {
+	fmt.Println()
+	fmt.Println("-----------------------------", msg, "-----------------------------")
+	for i, v := range list {
+		fmt.Println(i+1, v.Name, v.ModTime, v.ModTime, v.Mode, v.Level)
 	}
 }

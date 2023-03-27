@@ -17,6 +17,7 @@ type FileInfo struct {
 	ModTime string
 	Size    string //byte
 	IsDir   bool
+	Mode    fs.FileMode
 	Level   int
 }
 
@@ -56,7 +57,7 @@ func NewClient(conn *ssh.Client) (*sftp.Client, error) {
 func ReadDirAndFileInfoOneLevel(client *sftp.Client, remoteDir string) ([]FileInfo, error) {
 	var result []FileInfo
 
-	info := FileInfo{}
+	fileInfo := FileInfo{}
 
 	files, err := client.ReadDir(remoteDir)
 	if err != nil {
@@ -65,90 +66,19 @@ func ReadDirAndFileInfoOneLevel(client *sftp.Client, remoteDir string) ([]FileIn
 	}
 
 	for _, f := range files {
-		info.Name = f.Name()
-		info.ModTime = f.ModTime().Format("2006-01-02 15:04:05")
-		info.Size = fmt.Sprintf("%12d", f.Size())
-		info.IsDir = false
+		fileInfo.Name = f.Name()
+		fileInfo.ModTime = f.ModTime().Format("2006-01-02 15:04:05")
+		fileInfo.Size = fmt.Sprintf("%12d", f.Size())
+		fileInfo.IsDir = false
+		fileInfo.Mode = f.Mode()
+		fileInfo.Level = len(strings.Split(f.Name(), "/")) - 1
 
 		if f.IsDir() {
-			info.IsDir = true
+			fileInfo.IsDir = true
 		}
 
-		result = append(result, info)
+		result = append(result, fileInfo)
 
-	}
-
-	return result, nil
-}
-
-// TODO
-func ReadDirAndFileInfoAllLevel(client *sftp.Client, remoteDir string, isIncludeRemoteDir bool) ([]FileInfo, error) {
-	dirList, err := GetDirNameAllLevel(client, remoteDir)
-	if err != nil {
-		return nil, err
-	}
-
-	result := []FileInfo{}
-	for _, dirName := range dirList {
-		fileInfoList, err := ReadDirAndFileInfoOneLevel(client, dirName)
-		if err != nil {
-			return nil, err
-		}
-
-		result = append(result, fileInfoList...)
-	}
-
-	if isIncludeRemoteDir {
-		fileInfoList2, err := ReadDirAndFileInfoOneLevel(client, remoteDir)
-		if err != nil {
-			return nil, err
-		}
-
-		result = append(result, fileInfoList2...)
-	}
-
-	return result, nil
-}
-
-// * Exclude Remote Dir
-func GetDirNameAllLevel(client *sftp.Client, remoteDir string) ([]string, error) {
-	resultDir := []string{}
-	fileInfoList, err := ReadDirAndFileInfoOneLevel(client, remoteDir)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, v := range fileInfoList {
-		f := remoteDir + "/" + v.Name
-		if v.IsDir {
-			resultDir = append(resultDir, f)
-			subDir, _ := GetDirNameAllLevel(client, f)
-			if len(subDir) > 0 {
-				resultDir = append(resultDir, subDir...)
-			}
-		}
-	}
-
-	return resultDir, nil
-}
-
-// * Include File in Remote Dir
-func GetFileNameAllLevel(client *sftp.Client, remoteDir string) ([]string, error) {
-	dirList, err := GetDirNameAllLevel(client, remoteDir)
-	if err != nil {
-		return nil, err
-	}
-
-	dirList = append(dirList, remoteDir) // add init dir
-
-	result := []string{}
-	for _, v := range dirList {
-		a, err := GetFileNameOneLevel(client, v)
-		if err != nil {
-			return nil, err
-		}
-
-		result = append(result, a...)
 	}
 
 	return result, nil
@@ -161,10 +91,10 @@ func GetFileNameOneLevel(client *sftp.Client, remoteDir string) ([]string, error
 		return nil, err
 	}
 
-	for _, v := range fileInfoList {
-		f := remoteDir + "/" + v.Name
+	for _, fileInfo := range fileInfoList {
+		f := remoteDir + "/" + fileInfo.Name
 
-		if !v.IsDir {
+		if !fileInfo.IsDir {
 			result = append(result, f)
 		}
 	}
@@ -182,45 +112,41 @@ func CreateDir(client *sftp.Client, remoteDir string) error {
 }
 
 func DeleteAllInDir(client *sftp.Client, remoteDir string, isIncludeRemoteDir bool, isShowDebugMsg bool) error {
-	//* 1. Delete All File
-	fileNameList, err := GetFileNameAllLevel(client, remoteDir)
-	if err != nil {
-		return err
-	}
+	fileInfoList := Walk(client, remoteDir, false)
 
-	for _, fileName := range fileNameList {
-		err = client.Remove(fileName)
+	//* 1. Delete All File
+	fileNameList := FilterFileInfoList(fileInfoList, remoteDir, false, true, false, false)
+
+	for _, fileInfo := range fileNameList {
+		err := client.Remove(fileInfo.Name)
 		if err != nil {
 			return err
 		}
 
 		if isShowDebugMsg {
-			fmt.Println("File : " + fileName)
+			fmt.Println("File : " + fileInfo.Name)
 		}
 	}
 
 	//* 2. Delete Sub Dir
-	dirNameList, err := GetDirNameAllLevel(client, remoteDir)
-	if err != nil {
-		return err
-	}
+	dirNameList := FilterFileInfoList(fileInfoList, remoteDir, true, false, false, false)
 
-	dirNameList = ComputeAndOrderDirNameListByLevel(dirNameList, true)
+	dirNameList = OrderFileInfoList(dirNameList, true)
 
-	for _, dirName := range dirNameList {
-		err = client.Remove(dirName)
+	for _, fileInfo := range dirNameList {
+		err := client.Remove(fileInfo.Name)
 		if err != nil {
 			return err
 		}
 
 		if isShowDebugMsg {
-			fmt.Println("Sub Dir : " + remoteDir)
+			fmt.Println("Sub Dir : " + fileInfo.Name)
 		}
 	}
 
 	//* 3. Delete Remote Dir
 	if isIncludeRemoteDir {
-		err = client.Remove(remoteDir)
+		err := client.Remove(remoteDir)
 		if err != nil {
 			return err
 		}
@@ -252,6 +178,8 @@ func RenameDirOrFile(client *sftp.Client, oldRemoteDirOrFile string, newRemoteDi
 }
 
 func ChangeModeAllInDir(client *sftp.Client, remoteDir string, fileMode fs.FileMode, isIncludeRemoteDir bool, isShowDebugMsg bool) error {
+	fileInfoList := Walk(client, remoteDir, false)
+
 	//* 1. Change Remote Dir
 	if isIncludeRemoteDir {
 		err := client.Chmod(remoteDir, fileMode)
@@ -265,36 +193,30 @@ func ChangeModeAllInDir(client *sftp.Client, remoteDir string, fileMode fs.FileM
 	}
 
 	//* 2.  Change Sub Dir
-	dirNameList, err := GetDirNameAllLevel(client, remoteDir)
-	if err != nil {
-		return err
-	}
+	dirNameList := FilterFileInfoList(fileInfoList, remoteDir, true, false, false, false)
 
-	for _, dirName := range dirNameList {
-		err = client.Chmod(dirName, fileMode)
+	for _, fileInfo := range dirNameList {
+		err := client.Chmod(fileInfo.Name, fileMode)
 		if err != nil {
 			return err
 		}
 
 		if isShowDebugMsg {
-			fmt.Println("Sub Dir : " + dirName)
+			fmt.Println("Sub Dir : " + fileInfo.Name)
 		}
 	}
 
 	//* 3.  Change All File
-	fileNameList, err := GetFileNameAllLevel(client, remoteDir)
-	if err != nil {
-		return err
-	}
+	fileNameList := FilterFileInfoList(fileInfoList, remoteDir, false, true, false, false)
 
-	for _, fileName := range fileNameList {
-		err = client.Chmod(fileName, fileMode)
+	for _, fileInfo := range fileNameList {
+		err := client.Chmod(fileInfo.Name, fileMode)
 		if err != nil {
 			return err
 		}
 
 		if isShowDebugMsg {
-			fmt.Println("File : " + fileName)
+			fmt.Println("File : " + fileInfo.Name)
 		}
 	}
 
@@ -394,55 +316,7 @@ func UploadFile(client *sftp.Client, localFile, remoteFile string, isShowDebugMs
 	return bytes, err
 }
 
-// reverse : max -> min
-func ComputeAndOrderDirNameListByLevel(dirNameList []string, isReverse bool) []string {
-	type fileAttrType struct {
-		name  string
-		level int
-	}
-
-	fileAttr := []fileAttrType{}
-	maxLevel := -1
-
-	for _, fileName := range dirNameList {
-		a := strings.Split(fileName, "/")
-		levelFileName := len(a)
-
-		data := fileAttrType{
-			name:  fileName,
-			level: levelFileName,
-		}
-
-		fileAttr = append(fileAttr, data)
-
-		if levelFileName > maxLevel {
-			maxLevel = levelFileName
-		}
-	}
-
-	result := []string{}
-	if isReverse { // max -> min
-		for i := maxLevel; i >= 1; i-- {
-			for _, v := range fileAttr {
-				if i == v.level {
-					result = append(result, v.name)
-				}
-			}
-		}
-	} else { // min -> max
-		for i := 1; i <= maxLevel; i++ {
-			for _, v := range fileAttr {
-				if i == v.level {
-					result = append(result, v.name)
-				}
-			}
-		}
-	}
-
-	return result
-}
-
-func Walk(client *sftp.Client, remoteDir string, isIncludeDir bool, isIncludeFile bool, isIncludeRemoteDir bool, isShowDebugMsg bool) []FileInfo {
+func Walk(client *sftp.Client, remoteDir string, isShowDebugMsg bool) []FileInfo {
 	result := []FileInfo{}
 
 	w := client.Walk(remoteDir)
@@ -460,34 +334,18 @@ func Walk(client *sftp.Client, remoteDir string, isIncludeDir bool, isIncludeFil
 			ModTime: w.Stat().ModTime().String(),
 			Size:    fmt.Sprintf("%12d", w.Stat().Size()),
 			IsDir:   w.Stat().IsDir(),
+			Mode:    w.Stat().Mode(),
 			Level:   len(strings.Split(w.Path(), "/")) - 1,
 		}
 
-		if isIncludeDir {
-			if fInfo.IsDir {
-				if !isIncludeRemoteDir {
-					if fInfo.Name != remoteDir {
-						result = append(result, fInfo)
-					}
-				}
-
-				if isIncludeRemoteDir {
-					result = append(result, fInfo)
-				}
-			}
-		}
-
-		if isIncludeFile {
-			if !fInfo.IsDir {
-				result = append(result, fInfo)
-			}
-		}
+		w.Stat().Sys()
+		result = append(result, fInfo)
 	}
 
 	return result
 }
 
-func FilterPath(list []FileInfo, remoteDir string, isIncludeDir bool, isIncludeFile bool, isIncludeRemoteDir bool, isShowDebugMsg bool) []FileInfo {
+func FilterFileInfoList(list []FileInfo, remoteDir string, isIncludeDir bool, isIncludeFile bool, isIncludeRemoteDir bool, isShowDebugMsg bool) []FileInfo {
 	result := []FileInfo{}
 
 	for _, fInfo := range list {
@@ -512,6 +370,39 @@ func FilterPath(list []FileInfo, remoteDir string, isIncludeDir bool, isIncludeF
 		if isIncludeFile {
 			if !fInfo.IsDir {
 				result = append(result, fInfo)
+			}
+		}
+	}
+
+	return result
+}
+
+// reverse : max -> min
+func OrderFileInfoList(list []FileInfo, isReverse bool) []FileInfo {
+	result := []FileInfo{}
+
+	//Find Max Level
+	maxLevel := -1
+	for _, fileInfo := range list {
+		if fileInfo.Level > maxLevel {
+			maxLevel = fileInfo.Level
+		}
+	}
+
+	if isReverse { // max -> min
+		for i := maxLevel; i >= 1; i-- {
+			for _, v := range list {
+				if i == v.Level {
+					result = append(result, v)
+				}
+			}
+		}
+	} else { // min -> max
+		for i := 1; i <= maxLevel; i++ {
+			for _, v := range list {
+				if i == v.Level {
+					result = append(result, v)
+				}
 			}
 		}
 	}
