@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"io/fs"
 	"os"
 
@@ -14,6 +15,10 @@ func init() {
 	port = os.Getenv("PORT")
 	username = os.Getenv("USERNAME")
 	password = os.Getenv("PASSWORD")
+
+	if host == "" {
+		fmt.Println("**** You must set ENV ****")
+	}
 }
 
 func main() {

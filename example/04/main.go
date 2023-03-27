@@ -33,7 +33,8 @@ func main() {
 	}
 	defer client.Close()
 
-	remoteDir := "/root/DECH/Test/a"
+	oldRemoteFile := "/root/DECH/Test/2023-03-14/2023-03-14_06-00-01_UTL_backup.sql"
+	newRemoteFile := "/root/DECH/Test/2023-03-14/xxxx.sql"
 
-	dechsftp.DeleteAllInDir(client, remoteDir, true, true)
+	dechsftp.RenameDirOrFile(client, oldRemoteFile, newRemoteFile)
 }
