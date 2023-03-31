@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/THAI-DEV/dechsftp"
+	"github.com/pkg/sftp"
 )
 
 var host, port, username, password string
@@ -44,6 +45,8 @@ func main() {
 
 	filterList := filterIsBeforeList(dirListExcludeRemoteDir, remoteDir, 2) //2 day
 	showList(filterList, "Dir List")
+
+	// DeleteAll(filterList, client)
 }
 
 func showList(list []dechsftp.FileInfo, msg string) {
@@ -83,4 +86,11 @@ func isBefore(chkStrTime string, day int) bool {
 	// fmt.Println("targetTime", targetTime.Format("2006-01-02"))
 
 	return chkTime.Before(targetTime)
+}
+
+func DeleteAll(list []dechsftp.FileInfo, client *sftp.Client) {
+	for _, fileInfo := range list {
+		dechsftp.DeleteAllInDir(client, fileInfo.Name, true, true)
+	}
+
 }
