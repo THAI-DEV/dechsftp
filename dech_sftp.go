@@ -13,13 +13,13 @@ import (
 )
 
 type FileInfo struct {
-	Name     string
-	ModTime  string
-	Size     string //byte
-	IsDir    bool
-	Mode     fs.FileMode
-	Level    int
-	FileName string
+	Name    string
+	ModTime string
+	Size    string //byte
+	IsDir   bool
+	Mode    fs.FileMode
+	Level   int
+	File    string
 }
 
 func NewConnection(host string, port string, username, password string) (*ssh.Client, error) {
@@ -331,13 +331,13 @@ func Walk(client *sftp.Client, remoteDir string, isShowDebugMsg bool) []FileInfo
 		}
 
 		fInfo := FileInfo{
-			Name:     w.Path(),
-			ModTime:  w.Stat().ModTime().String(),
-			Size:     fmt.Sprintf("%12d", w.Stat().Size()),
-			IsDir:    w.Stat().IsDir(),
-			Mode:     w.Stat().Mode(),
-			Level:    len(strings.Split(w.Path(), "/")) - 1,
-			FileName: w.Stat().Name(),
+			Name:    w.Path(),
+			ModTime: w.Stat().ModTime().String(),
+			Size:    fmt.Sprintf("%12d", w.Stat().Size()),
+			IsDir:   w.Stat().IsDir(),
+			Mode:    w.Stat().Mode(),
+			Level:   len(strings.Split(w.Path(), "/")) - 1,
+			File:    w.Stat().Name(),
 		}
 
 		w.Stat().Sys()
