@@ -73,6 +73,7 @@ func ReadDirAndFileInfoOneLevel(client *sftp.Client, remoteDir string) ([]FileIn
 		fileInfo.IsDir = false
 		fileInfo.Mode = f.Mode()
 		fileInfo.Level = len(strings.Split(f.Name(), "/")) - 1
+		fileInfo.File = f.Name()
 
 		if f.IsDir() {
 			fileInfo.IsDir = true
